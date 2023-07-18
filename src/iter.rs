@@ -1,13 +1,8 @@
 use crate::{ArrayComboIter, BoxComboIter, ComboIter};
 
 impl<'a, T, S: AsRef<[*const T]> + AsMut<[*const T]>> ComboIter<'a, T, S> {
+    /// advance to the next combo
     pub fn advance(&mut self) {
-        if !self.ever_advanced {
-            // Something of a sentinel. Needed because advancing
-            // must _precede_ peeking, but it follows, conceptually.
-            self.ever_advanced = true;
-            return;
-        }
         if let Some(next) = self.next.as_mut().map(AsMut::as_mut) {
             for i in (0..next.len()).rev() {
                 let n = &mut next[i];
@@ -33,7 +28,13 @@ impl<'a, T, S: AsRef<[*const T]> + AsMut<[*const T]>> ComboIter<'a, T, S> {
         }
     }
     pub fn next(&mut self) -> Option<&[&T]> {
-        self.advance();
+        if !self.ever_advanced {
+            // Something of a sentinel. Needed because advancing
+            // must _precede_ peeking, but it follows, conceptually.
+            self.ever_advanced = true;
+        } else {
+            self.advance();
+        }
         self.peek()
     }
     pub fn peek(&self) -> Option<&[&T]> {

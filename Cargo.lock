@@ -3,5 +3,5 @@
 version = 3
 
 [[package]]
-name = "index_combos"
+name = "combo_iter"
 version = "0.1.0"

@@ -1,12 +1,34 @@
-struct SliceItemComboIterX<'a, T> {
+pub trait SliceLike<T> {
+    fn slice(&self) -> &[T];
+    fn slice_mut(&mut self) -> &mut [T];
+}
+impl<T> SliceLike<T> for Box<[T]> {
+    fn slice(&self) -> &[T] {
+        self
+    }
+    fn slice_mut(&mut self) -> &mut [T] {
+        self
+    }
+}
+impl<T, const N: usize> SliceLike<T> for [T; N] {
+    fn slice(&self) -> &[T] {
+        self
+    }
+    fn slice_mut(&mut self) -> &mut [T] {
+        self
+    }
+}
+
+pub struct SliceItemComboIterX<'a, T, S: SliceLike<*const T>> {
     items: &'a [T],
     // INVARIANT: if let State::Next(ptrs) = self.state,
     // then each in ptrs is aligned to an element in self.items.
-    next: Option<Box<[*const T]>>,
+    next: Option<S>,
     ever_advanced: bool,
 }
 
-impl<'a, T> SliceItemComboIterX<'a, T> {
+pub type SliceItemComboIterDyn<'a, T> = SliceItemComboIterX<'a, T, Box<[*const T]>>;
+impl<'a, T> SliceItemComboIterDyn<'a, T> {
     pub fn new(items: &'a [T], combo_len: usize) -> Self {
         let next = if items.is_empty() && combo_len > 0 {
             None
@@ -16,6 +38,22 @@ impl<'a, T> SliceItemComboIterX<'a, T> {
         };
         Self { items, next, ever_advanced: false }
     }
+}
+
+pub type SliceItemComboIterStat<'a, T, const C: usize> = SliceItemComboIterX<'a, T, [*const T; C]>;
+impl<'a, T, const C: usize> SliceItemComboIterStat<'a, T, C> {
+    pub fn new(items: &'a [T], combo_len: usize) -> Self {
+        let next = if items.is_empty() && combo_len > 0 {
+            None
+        } else {
+            // invariant established: items is non-empty, so items.as_ptr() is in range
+            Some([items.as_ptr(); C])
+        };
+        Self { items, next, ever_advanced: false }
+    }
+}
+
+impl<'a, T, S: SliceLike<*const T>> SliceItemComboIterX<'a, T, S> {
     pub fn advance(&mut self) {
         if !self.ever_advanced {
             // Something of a sentinel. Needed because advancing
@@ -23,7 +61,7 @@ impl<'a, T> SliceItemComboIterX<'a, T> {
             self.ever_advanced = true;
             return;
         }
-        if let Some(next) = self.next.as_mut() {
+        if let Some(next) = self.next.as_mut().map(SliceLike::slice_mut) {
             for i in (0..next.len()).rev() {
                 let n = &mut next[i];
                 let range = self.items.as_ptr_range();
@@ -52,7 +90,7 @@ impl<'a, T> SliceItemComboIterX<'a, T> {
         self.peek()
     }
     pub fn peek(&self) -> Option<&[&T]> {
-        let next: &[*const T] = self.next.as_ref()?;
+        let next: &[*const T] = self.next.as_ref().map(SliceLike::slice)?;
         unsafe {
             // SAFETY:
             // - in bounds because of invariant
@@ -63,7 +101,7 @@ impl<'a, T> SliceItemComboIterX<'a, T> {
 }
 
 fn main() {
-    let mut x = SliceItemComboIterX::new(&[0, 1, 2], 2);
+    let mut x = SliceItemComboIterDyn::new(&[0, 1, 2], 2);
     while let Some(combo) = x.next() {
         println!("{:?}", combo);
     }
@@ -77,7 +115,7 @@ fn check<const C: usize>(num_items: u16, expect_combos: &[[u16; C]]) {
         }
     }
     let items: Vec<_> = (0u16..num_items).collect();
-    let mut combo_iter = SliceItemComboIterX::new(&items, C);
+    let mut combo_iter = SliceItemComboIterDyn::new(&items, C);
     let mut expect_combo_iter = expect_combos.iter();
     while let Some(a) = combo_iter.next() {
         let b = expect_combo_iter.next().unwrap();

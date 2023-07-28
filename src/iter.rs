@@ -27,7 +27,7 @@ impl<'a, T, S: AsRef<[*const T]> + AsMut<[*const T]>> ComboIter<'a, T, S> {
             self.next = None;
         }
     }
-    pub fn next(&mut self) -> Option<&[&T]> {
+    pub fn next(&mut self) -> Option<&'a [&'a T]> {
         if !self.ever_advanced {
             // Something of a sentinel. Needed because advancing
             // must _precede_ peeking, but it follows, conceptually.
@@ -37,7 +37,7 @@ impl<'a, T, S: AsRef<[*const T]> + AsMut<[*const T]>> ComboIter<'a, T, S> {
         }
         self.peek()
     }
-    pub fn peek(&self) -> Option<&[&T]> {
+    pub fn peek(&self) -> Option<&'a [&'a T]> {
         let next: &[*const T] = self.next.as_ref().map(AsRef::as_ref)?;
         unsafe {
             // SAFETY:
